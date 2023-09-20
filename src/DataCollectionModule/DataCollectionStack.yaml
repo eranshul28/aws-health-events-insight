@@ -189,3 +189,58 @@ Outputs:
     Value: !GetAtt DataCollectionBus.Arn
     Export:
       Name: DataCollectionBusArn
+
+
+
+
+const AWS = require('aws-sdk');
+const qs = new AWS.QuickSight();
+const s3 = new AWS.S3();
+const ses = new AWS.SES();
+
+exports.handler = async (event, context, callback) => {
+  try {
+    // Use QuickSight API to generate a report and export it to S3.
+    const exportParams = {
+      AwsAccountId: 'YOUR_ACCOUNT_ID',
+      Namespace: 'default',
+      ReportId: 'YOUR_REPORT_ID',
+      S3Destination: {
+        Bucket: 'YOUR_S3_BUCKET',
+        Prefix: 'report_exports/',
+      },
+    };
+    const exportResponse = await qs.createTemplateAlias(exportParams).promise();
+
+    // Generate a pre-signed URL to the exported report in S3.
+    const s3Params = {
+      Bucket: 'YOUR_S3_BUCKET',
+      Key: 'report_exports/YOUR_REPORT_NAME.pdf', // Update with the actual report name
+    };
+    const downloadUrl = await s3.getSignedUrlPromise('getObject', s3Params);
+
+    // Send the report via email using SES.
+    const emailParams = {
+      Destination: {
+        ToAddresses: ['recipient@example.com'],
+      },
+      Message: {
+        Body: {
+          Text: {
+            Data: `Download your QuickSight report here: ${downloadUrl}`,
+          },
+        },
+        Subject: {
+          Data: 'Your QuickSight Report',
+        },
+      },
+      Source: 'sender@example.com',
+    };
+    await ses.sendEmail(emailParams).promise();
+
+    callback(null, 'Report sent successfully!');
+  } catch (error) {
+    console.error('Error:', error);
+    callback(error);
+  }
+};
